@@ -1,0 +1,43 @@
+\usepackage{fontspec, xeCJK}
+\setCJKmainfont{Noto Sans CJK TC}
+\setCJKmonofont{Noto Sans Mono CJK TC}
+\setCJKsansfont{Noto Sans CJK TC}
+\setmainfont{Noto Sans}
+\usepackage[utf8]{inputenc}
+\usepackage[backend=biber,style=ieee-alphabetic]{biblatex}
+\addbibresource{references.bib}
+
+\usepackage{hyperref, xcolor, listings, bookmark, listings}
+
+\newcommand{\email}[1]{\color{blue}\href{mailto:#1}{#1}}
+
+\AtBeginSubsection[]
+{
+    \begin{frame}
+        \frametitle{Outline}
+        \tableofcontents[currentsection, currentsubsection]
+    \end{frame}
+}
+
+\lstset{
+    basicstyle=\ttfamily\tiny,
+    breaklines=true,
+    frame=single,
+    backgroundcolor=\color{white},
+    columns=fullflexible,
+    xleftmargin=0pt,
+    xrightmargin=0pt,
+    mathescape=false,
+}
+
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning}
+
+\tikzstyle{startstop} = [rectangle, rounded corners, minimum width=3mm, minimum height=1mm,text centered, draw=black, fill=red!30]
+\tikzstyle{process} = [rectangle, minimum width=3mm, minimum height=1mm, text centered, draw=black, fill=orange!30]
+\tikzstyle{decision} = [ellipse, minimum width=3mm, minimum height=1mm, text centered, draw=black, fill=yellow!30]
+\tikzstyle{arrow} = [thick,->,>=stealth]
+
+\newcommand{\mainrepo}{\url{https://github.com/25077667/dynamic-injection-linux}}
+\newcommand{\mainrepotitle}{Dynamic Injection in Linux}
+\newcommand{\mainrepolicense}{GPLv3}

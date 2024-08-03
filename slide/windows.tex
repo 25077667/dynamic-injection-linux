@@ -1,0 +1,299 @@
+\section{Windows}
+
+\subsection{Remote Thread Injection}
+
+
+\begin{frame}
+\frametitle{Overview of Remote Thread Injection}
+    Remote thread injection is a technique supported by the Windows API.
+
+    \begin{itemize}
+        \item \textbf{Debugging:} Inject threads to trigger breakpoints and manage program flow.
+        \item \textbf{Profiling:} Monitor and analyze performance metrics.
+        \item \textbf{Automation:} Automate user actions in software testing or UI automation.
+        \item \textbf{Security Software:} Enhance security by injecting scanning or remediation code.
+    \end{itemize}
+    \vspace{1em}
+    \textit{Source:} \cite{chen2012}
+\end{frame}
+
+\begin{frame}
+\frametitle{How It Works}
+    \begin{enumerate}
+        \item \textbf{Open Process Handle:} Obtain handle with \texttt{OpenProcess}.
+        \item \textbf{Allocate Memory:} Use \texttt{VirtualAllocEx} in the target process.
+        \item \textbf{Write Code/Data:} Employ \texttt{WriteProcessMemory} for writing.
+        \item \textbf{Create Remote Thread:} Initiate with \texttt{CreateRemoteThread}.
+        \item \textbf{Execute and Synchronize:} Execute code and synchronize with \texttt{WaitForSingleObject}.
+    \end{enumerate}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{User Space Code Example}
+    \begin{lstlisting}[language=C, keywordstyle=\color{red}, keywords={CreateRemoteThread, OpenProcess, VirtualAllocEx, WriteProcessMemory}]
+    #include <windows.h>
+    #include <stdio.h>
+    
+    int main() {
+        DWORD pid = 1234; // Target process ID
+        HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+        LPVOID pRemoteCode = VirtualAllocEx(hProcess, NULL, 4096, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+        const char *code = "..."; // Shellcode or function address
+        WriteProcessMemory(hProcess, pRemoteCode, code, strlen(code), NULL);
+        HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)pRemoteCode, NULL, 0, NULL);
+        WaitForSingleObject(hThread, INFINITE);
+        CloseHandle(hThread);
+        VirtualFreeEx(hProcess, pRemoteCode, 0, MEM_RELEASE);
+        CloseHandle(hProcess);
+        printf("Injection successful.\n");
+        return 0;
+    }
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Wait?! What is CreateRemoteThread?}
+    \begin{itemize}
+        \item How did the \texttt{\color{blue}CreateRemoteThread} function work?
+        \item What can we learn from the underlying implementation?
+        \item How to load a DLL into a remote process?
+    \end{itemize}
+\end{frame}
+
+\subsection{Detailed Analysis of CreateRemoteThread}
+\begin{frame}
+    \frametitle{Reverse Engineering CreateRemoteThread kernel32.dll (User space)}
+    \begin{itemize}
+        \item \texttt{\color{blue}CreateRemoteThread}, located in \texttt{kernel32.dll}, serves as the user-mode entry point.
+        \item The underlying implementation is handled by \texttt{\color{blue}CreateRemoteThreadEx} in \texttt{kernelbase.dll}.
+        \item This function in turn calls \texttt{\color{blue}NtCreateThreadEx} within \texttt{ntdll.dll}, transitioning from user mode to kernel mode.
+        \item \texttt{\color{blue}NtCreateThreadEx} performs the system-level operation of creating a new thread in a remote process.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{CreateRemoteThread in kernel32.dll}
+    {\tiny Note: The API-MS-WIN-CORE-PROCESSTHREADS-L1-1-1.DLL is a forwarder to KernelBase.dll.\\
+    It indicates CreateRemoteThreadEx is the actual implementation.}
+    \lstinputlisting[
+        language={[x86masm]Assembler},
+        basicstyle=\ttfamily\tiny,
+        frame=single,
+        backgroundcolor=\color{white},
+        xleftmargin=0pt,
+        xrightmargin=0pt,
+        keepspaces=true,
+        mathescape=false,
+    ]{src/CreateRemoteThreadKernel32.asm}
+\end{frame}
+
+% lsting the c version of CreateRemoteThreadKernel32.c
+\begin{frame}[fragile]
+    \frametitle{CreateRemoteThread in kernel32.dll}
+    \lstinputlisting[
+        language=C,
+        basicstyle=\ttfamily\tiny,
+        frame=single,
+        backgroundcolor=\color{white},
+        xleftmargin=0pt,
+        xrightmargin=0pt,
+        keepspaces=true,
+        mathescape=false,
+    ]{src/CreateRemoteThreadKernel32.c}
+\end{frame}
+
+% the CreateRemoteThreadEx in kernelbase.dll
+\begin{frame}[fragile]
+    \frametitle{CreateRemoteThreadEx in kernelbase.dll}
+    \small
+    \begin{itemize}
+        \item \textbf{Initialize Object Attributes and Attribute List:}
+        \begin{itemize}
+            \tiny
+            \item Call \texttt{\color{blue}BaseFormatObjectAttributes} to prepare object attributes.
+            \item If \texttt{lpAttributeList} is not null, call \texttt{\color{blue}InitializeProcThreadAttributeList}.
+        \end{itemize}
+        \item \textbf{Duplicate and Query Process:}
+        \begin{itemize}
+            \tiny
+            \item If \texttt{hProcess} is not \texttt{-1}, call \texttt{\color{blue}NtDuplicateObject} to duplicate the process handle.
+            \item Call \texttt{\color{blue}NtQueryInformationProcess} to get process information.
+        \end{itemize}
+        \item \textbf{Handle Activation Context:}
+        \begin{itemize}
+            \tiny
+            \item Call \texttt{\color{blue}RtlQueryInformationActivationContext}.
+            \item If necessary, allocate and activate the activation context using \texttt{\color{blue}RtlAllocateActivationContextStack} and \texttt{\color{blue}RtlActivateActivationContextEx}.
+        \end{itemize}
+        \item \textbf{Create the Thread:}
+        \begin{itemize}
+            \tiny
+            \item Call \texttt{\color{blue}NtCreateThreadEx} to create the remote thread.
+            \item If \texttt{contextFlag} is set, manage the activation context during thread creation using 
+            \texttt{\color{blue}RtlAllocateActivationContextStack} and \texttt{\color{blue}RtlActivateActivationContextEx}.
+        \end{itemize}
+        \item \textbf{Resume Thread and Handle Errors:}
+        \begin{itemize}
+            \tiny
+            \item If the thread was created successfully and not suspended, call \texttt{\color{blue}NtResumeThread}.
+            \item If any error occurs, release activation context, free activation context stack, terminate the thread, and close handles as necessary.
+            \item Set the last error using \texttt{\color{blue}ConvertAndSetLastError}.
+        \end{itemize}
+    \end{itemize}    
+\end{frame}
+
+\begin{frame}[fragile]
+    \frametitle{Flowchart for CreateRemoteThreadEx in kernelbase.dll}
+    \begin{center}
+    \begin{tikzpicture}[node distance=.4cm, auto, scale=0.8, transform shape]
+
+    \node (start) [startstop] {Start};
+    \node (initAttr) [process, below=of start] {BaseFormatObjectAttributes};
+    \node (initAttrList) [process, right=of initAttr, xshift=3cm] {InitializeProcThreadAttributeList};
+    \node (dupObject) [process, below=of initAttrList] {NtDuplicateObject};
+    \node (queryInfo) [process, below=of dupObject] {NtQueryInformationProcess};
+    \node (handleActCtx) [process, left=of queryInfo, xshift=-3cm] {RtlQueryInformationActivationContext};
+    \node (allocActCtxStack) [process, below=of handleActCtx] {RtlAllocateActivationContextStack};
+    \node (activateActCtx) [process, below=of allocActCtxStack] {RtlActivateActivationContextEx};
+    % make the createThread be light green background
+    \node (createThread) [process, below=of activateActCtx, fill=green!30] {NtCreateThreadEx};
+    \node (manageActCtx) [process, right=of createThread, xshift=3cm] {ManageActivationContext};
+    \node (setThreadId) [process, below=of manageActCtx] {Set lpThreadId};
+    \node (resumeThread) [process, left=of setThreadId, xshift=-3cm] {NtResumeThread};
+    \node (handleError) [process, below=of resumeThread] {ConvertAndSetLastError};
+    \node (end) [startstop, below=of handleError] {End};
+
+    \draw [arrow] (start) -- (initAttr);
+    \draw [arrow] (initAttr) -- (initAttrList);
+    \draw [arrow] (initAttrList) -- (dupObject);
+    \draw [arrow] (dupObject) -- (queryInfo);
+    \draw [arrow] (queryInfo) -- (handleActCtx);
+    \draw [arrow] (handleActCtx) -- (allocActCtxStack);
+    \draw [arrow] (allocActCtxStack) -- (activateActCtx);
+    \draw [arrow] (activateActCtx) -- (createThread);
+    \draw [arrow] (createThread) -- (manageActCtx);
+    \draw [arrow] (manageActCtx) -- (setThreadId);
+    \draw [arrow] (setThreadId) -- (resumeThread);
+    \draw [arrow] (resumeThread) -- (handleError);
+    \draw [arrow] (handleError) -- (end);
+
+    \end{tikzpicture}
+    \end{center}
+\end{frame}
+
+\begin{frame}
+    \frametitle{CreateRemoteThreadEx in kernelbase.dll}
+    \centering
+    \begin{itemize}
+        \item The \texttt{\color{blue}CreateRemoteThreadEx} function in \texttt{kernelbase.dll} is the actual implementation.
+        \item ASM, inline, and refactored C versions are available for detailed analysis:
+        \begin{itemize}
+            \item ASM: \texttt{\color{magenta}CreateRemoteThreadExKernelBase.asm} (around 400 lines)
+            \item Inline: \texttt{\color{magenta}CreateRemoteThreadExKernelBaseInline.c} (around 330 lines)
+            \item C: \texttt{\color{magenta}CreateRemoteThreadExKernelBase.c} (around 190 lines)
+        \end{itemize}
+    \end{itemize}
+    \vspace{1cm}
+    \begin{itemize}
+        \item Please refer to the following files for detailed analysis:
+        \begin{itemize}
+            \item \texttt{\color{magenta}src/CreateRemoteThreadExKernelBase.asm}: Source DLL assembly code.
+            \item \texttt{\color{magenta}src/CreateRemoteThreadExKernelBaseInline.c}: ASM decompile into C code directly.
+            \item \texttt{\color{magenta}src/CreateRemoteThreadExKernelBase.c}: Refactored C code.
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+    \frametitle{NtCreateThreadEx in ntdll.dll}
+        \lstinputlisting[
+            language={[x86masm]Assembler},
+            basicstyle=\ttfamily\tiny,
+            frame=single,
+            backgroundcolor=\color{white},
+            xleftmargin=0pt,
+            xrightmargin=0pt,
+            keepspaces=true,
+            mathescape=false,
+        ]{src/NtCreateThreadExNtdll.asm}
+\end{frame}
+
+% okay, next kernel space, we use leaked source code to analyze the NtCreateThreadEx
+% PspCreateThread->KeInitThread->KiInitializeContextThread->KiThreadStartUp
+% KiThreadStartUp->PspUserThreadStartup->DbgkCreateThread
+
+\begin{frame}[fragile]
+    \frametitle{Kernel Space of NtCreateThreadEx}
+    \begin{itemize}
+        \item Using leaked source code to analyze the \texttt{\color{blue}NtCreateThreadEx} function.
+        \item Function Call Chain:
+        \begin{itemize}
+            \item \texttt{\color{blue}PspCreateThread}
+            \item \texttt{\color{blue}KeInitThread}
+            \item \texttt{\color{blue}KiInitializeContextThread}
+            \item \texttt{\color{blue}KiThreadStartup}
+            \item \texttt{\color{blue}PspUserThreadStartup}
+            \item \texttt{\color{blue}DbgkCreateThread}
+        \end{itemize}
+    \end{itemize}
+
+    Note: Detailed analysis of the kernel space implementation of \texttt{\color{blue}NtCreateThreadEx} is 
+    beyond the scope of this presentation.
+    % https://medium.com/@Achilles8284/the-birth-of-a-process-part-2-97c6fb9c42a2#:~:text=PspCreateThread%20routine%20is%20responsible%20for,new%20thread%20is%20being%20created.
+    % https://doxygen.reactos.org/dc/d4d/ntoskrnl_2ps_2thread_8c.html#adc01401b6d1e61c428acaafdedec4dca
+    % https://github.com/mic101/windows/blob/master/WRK-v1.2/base/ntos/ps/create.c#L243
+    % https://bbs.kanxue.com/thread-271390.htm
+    % https://bbs.kanxue.com/thread-225047.htm
+
+\end{frame}
+
+% subsubsection
+% What can we learn from the underlying implementation?
+% enumerate all key steps in the CreateRemoteThread
+\subsubsection{What Can We Learn?}
+\begin{frame}
+    \frametitle{What Can We Learn?}
+    \begin{itemize}
+        \item \textbf{NtDuplicateObject:} Ensures that related objects remain in the same state.
+        \begin{itemize}
+            \item In Linux, we should care about the target process state to be race-free.
+        \end{itemize}
+        \item \textbf{RtlQueryInformationActivationContext:} Check the compatibility of the activation context for dll version.
+        \begin{itemize}
+            \item In Linux, we should care about the compatibility of the shared library, the libc\(s\), and the dlopen.
+        \end{itemize}
+        \item \textbf{RtlActivateActivationContextEx:} Activates the activation context for the target thread.
+        \begin{itemize}
+            \item In Linux, the thread-local storage \(TLS\) should be managed properly with the clone's clone\_args.
+            \item The clone3 syscall introduced in Linux 5.3 provides more control over the thread creation.
+        \end{itemize}
+        \item \textbf{NtResumeThread:} Resumes the thread if it is not suspended.
+        \begin{itemize}
+            \item In Linux, we should notice the thread status in the kernel.
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{The CreateRemoteThread MSDN remarks \cite{MicrosoftCreateRemoteThread}}
+    \small
+    \textbf{Changes in Timing and Memory Layout:}
+    \begin{itemize}
+        \item The injection of new threads alters the timing dynamics of the application.
+        \item These changes can lead to unpredictable behavior, especially in timing-sensitive applications.
+    \end{itemize}
+    \textbf{Effects on DLLs:}
+    \begin{itemize}
+        \item Each new thread triggers a call to the entry point of each loaded DLL within the process.
+        \item This behavior can cause unintended side effects if DLLs are not designed to handle multiple initializations.
+    \end{itemize}
+    \textbf{Potential for Deadlock:}
+    \begin{itemize}
+        \item Deadlock may occur if the injected thread calls functions like \texttt{\color{blue}LoadLibrary},
+            which internally uses \texttt{\color{blue}VirtualAlloc} that requires non-reentrant locks.
+        \item If the target process is preempted while it holds a non-reentrant lock required by \texttt{\color{blue}VirtualAlloc},
+            and the injected thread concurrently attempts to acquire the same lock, the process may become unresponsive indefinitely.
+    \end{itemize}
+\end{frame}
+
+% https://alice.climent-pommeret.red/posts/a-syscall-journey-in-the-windows-kernel/

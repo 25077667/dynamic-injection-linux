@@ -1,0 +1,249 @@
+\section{Detection}
+
+\subsection{Hooking Critical Functions}
+\begin{frame}
+    \frametitle{Hooking User Space Functions}
+    \textbf{The glibc Ecosystem and LD\_PRELOAD}
+    \begin{itemize}
+        \item \texttt{LD\_PRELOAD} allows preloading of shared libraries to override functions in the glibc ecosystem.
+        \item By specifying a custom library in \texttt{LD\_PRELOAD}, functions can be hooked before the original ones are loaded.
+    \end{itemize}
+    \textbf{Other libc Ecosystems (like Android)}
+    \begin{itemize}
+        \item Android's Bionic libc supports similar hooking techniques.
+        \item Custom libraries can override default behavior using linker tricks or direct manipulation of function pointers.
+    \end{itemize}
+    \textbf{DynamoRIO}
+    \begin{itemize}
+        \item DynamoRIO is a dynamic binary instrumentation tool that allows for inserting hooks into user space applications.
+        \item Useful for performance monitoring, profiling, and modifying application behavior at runtime.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Hooking Kernel Space Functions}
+    \textbf{System Call Table Hooking}
+    \begin{itemize}
+        \item Loadable kernel modules (LKMs) can modify the system call table to redirect system calls to custom handlers.
+        \item This method allows for deep modification of kernel behavior but can be risky and is often detected by security mechanisms.
+    \end{itemize}
+    \textbf{kprobes/uprobes/eBPF}
+    \begin{itemize}
+        \item \texttt{kprobes} and \texttt{uprobes} allow for tracing and probing kernel and user space functions respectively.
+        \item eBPF (Extended Berkeley Packet Filter) enables dynamic tracing and hooking of kernel functions without modifying the kernel source code.
+        \item Check when it is loading a foreign module.
+    \end{itemize}
+    \textbf{Seccomp and Capabilities}
+    \begin{itemize}
+        \item Seccomp (Secure Computing Mode) can restrict the system calls a process can make, adding a layer of security.
+        \item Linux capabilities provide fine-grained control over the privileges of processes, enhancing security by limiting the scope of potential exploits.
+    \end{itemize}
+\end{frame}
+
+\subsection{Code Integrity Checks}
+\begin{frame}
+    \frametitle{Code Integrity Checks}
+    \begin{itemize}
+        \item when
+        \item where
+        \item how
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Code Integrity Checks: When}
+    \textbf{When to Perform Code Integrity Checks}
+    \begin{itemize}
+        \item During the initial loading of the application to ensure the integrity of the executable and shared libraries.
+        \item Periodically during execution to detect any unauthorized modifications or tampering.
+        \item Before critical operations or transitions to ensure the system is in a trusted state.
+        \begin{itemize}
+            \item TOCTOU
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Code Integrity Checks: Where}
+    \textbf{Where to Implement Code Integrity Checks}
+    \begin{itemize}
+        \item In the application startup routines to verify the integrity of the executable and essential libraries.
+        \item At strategic points within the application, such as before executing privileged operations or accessing sensitive data.
+        \item Within the operating system or runtime environment to provide a higher level of assurance.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Code Integrity Checks: How}
+    \textbf{How to Perform Code Integrity Checks}
+    \begin{itemize}
+        \item Calculate cryptographic hashes (e.g., SHA-256) of the code segments and compare them against known good values.
+        \item Use digital signatures to verify the authenticity and integrity of code modules.
+        \item Employ memory protection mechanisms to prevent unauthorized code modifications.
+        \item Monitor system calls and other critical operations to detect and respond to integrity violations.
+    \end{itemize}
+\end{frame}
+
+\subsection{Hardware-Based Protections}
+\begin{frame}
+    \frametitle{Hardware-Based Protections and Case Studies}
+    \begin{itemize}
+        \item Overview of the importance of hardware-based protections.
+        \item How do Microsoft, Apple, and Google implement these protections?
+        \item List of Intel and AMD technologies supporting hardware-based protections.
+        \item Real-world examples and case studies of successful prevention and mitigation.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Hardware-Based Protections for DLL Injection: Microsoft}
+    \textbf{How does Microsoft do it?}
+    \begin{itemize}
+        \item \textbf{Windows Defender System Guard:} Ensures integrity and security of the system using hardware-based root of trust.
+        \item \textbf{Credential Guard:} Uses virtualization-based security to isolate and protect credentials, making it harder for injected DLLs to access sensitive data.
+        \item \textbf{Control Flow Guard (CFG):} A security feature that helps prevent memory corruption vulnerabilities by ensuring that all indirect function calls go to known, safe locations.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Hardware-Based Protections for DLL Injection: Apple}
+    \textbf{How does Apple do it?}
+    \begin{itemize}
+        \item \textbf{Secure Enclave:} Provides a secure environment for key management and cryptographic operations, protecting against unauthorized code execution.
+        \item \textbf{XNU Kernel Security:} Enforces hardware-based code signing and memory protection to prevent unauthorized code (such as injected DLLs) from executing.
+        \item \textbf{System Integrity Protection (SIP):} Restricts root user from performing certain actions that may compromise system integrity, including the injection of malicious code.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Hardware-Based Protections for DLL Injection: Google}
+    \textbf{How does Google do it?}
+    \begin{itemize}
+        \item \textbf{Google Play Protect:} Continuously scans and verifies apps and their behavior, preventing malicious activities including unauthorized code injection.
+        \item \textbf{Android Verified Boot:} Ensures the integrity of the operating system from boot to runtime, protecting against malicious code injection.
+        \item \textbf{Titan M Security Chip:} Integrates hardware-based security features to prevent tampering and unauthorized access, including DLL injection attacks.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{x86 Technologies Supporting DLL Injection Protections (Intel)}
+    \textbf{Intel Technologies:}
+    \begin{itemize}
+        \item \textbf{Intel SGX (Software Guard Extensions):} Provides hardware-based memory encryption to isolate and protect specific application code and data.
+        \item \textbf{Intel TXT (Trusted Execution Technology):} Establishes a root of trust, preventing unauthorized code execution from the initial boot process.
+        \item \textbf{Intel CET (Control-flow Enforcement Technology):} Helps defend against Return-Oriented Programming (ROP) and Jump/Call-Oriented Programming (JOP) attacks, which can be exploited through DLL injection.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{x86 Technologies Supporting DLL Injection Protections (AMD)}
+    \textbf{AMD Technologies:}
+    \begin{itemize}
+        \item \textbf{AMD SEV (Secure Encrypted Virtualization):} Encrypts virtual machine memory, protecting against hypervisor-based attacks that could facilitate DLL injection.
+        \item \textbf{AMD PSP (Platform Security Processor):} A dedicated security subsystem that provides secure boot and cryptographic functions, protecting against unauthorized code execution.
+        \item \textbf{AMD SME (Secure Memory Encryption):} Encrypts system memory to guard against physical memory attacks that could enable DLL injection.
+    \end{itemize}
+\end{frame}
+
+\subsection{Machine Learning and AI-Based Detection}
+\begin{frame}
+    \frametitle{Detection and Blocking Method Using PEB-LDR}
+    \textbf{ICS EWS in Smart IoT Environments}:
+    \begin{itemize}
+        \item Proposes a method to detect and block DLL injection attacks in industrial control systems using PEB-LDR data and a whitelist chain design technique.
+        \item Analyzes existing API calling methods and uses Microsoft Detour tool to block DLL injection.
+        \item Achieves high detection efficiency without relying on external connections or requiring extensive preprocessing.
+        \item \textbf{Citation:} \cite{kim2023}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Ransomware Detection Using Memory Features}
+    \textbf{Machine Learning-Based Detection}:
+    \begin{itemize}
+        \item Builds a robust machine learning model to detect unknown ransomware samples using memory dumps.
+        \item Aims to achieve high accuracy and efficiency in ransomware detection.
+        \item \textbf{Citation:} \cite{aljabri2024}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Weaponizing ML Models with Ransomware}
+    \textbf{Machine Learning-Based Detection}:
+    \begin{itemize}
+        \item Demonstrates how ransomware can be automatically launched from a pre-trained machine learning model.
+        \item Uses steganography techniques to embed malicious payloads into model weights and biases.
+        \item Executes the payload when the model is loaded using Python's sys.settrace method.
+        \item \textbf{Citation:} \cite{wickens2022}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Detecting Reflective DLL Injection}
+    \textbf{Machine Learning-Based Detection}:
+    \begin{itemize}
+        \item Discusses tools like Andrew King's presentation at DEF CON 20 and Antimeter that can detect DLL injection using reflective techniques.
+        \item Mentions using Python tools like pydbg and pydasm to enumerate memory of running processes.
+        \item \textbf{Citation:} \cite{stackoverflow2012}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Effectiveness of Machine Learning vs. Traditional Methods}
+    \textbf{Detection Rates}:
+    \begin{itemize}
+        \item Machine learning techniques have shown significantly higher detection rates for DLL injection attacks.
+        \item Deep learning models can achieve detection rates exceeding 90\%, compared to traditional signature-based methods.
+        \item \textbf{Citation:} \cite{kim2023}, \cite{stackoverflow2012}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Effectiveness of Machine Learning vs. Traditional Methods}
+    \textbf{Behavioral Analysis}:
+    \begin{itemize}
+        \item Machine learning approaches leverage behavioral analytics to identify anomalies in system behavior.
+        \item This provides a proactive defense mechanism compared to traditional signature detection.
+        \item \textbf{Citation:} \cite{aljabri2024}, \cite{stackoverflow2012}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Effectiveness of Machine Learning vs. Traditional Methods}
+    \textbf{Adaptability}:
+    \begin{itemize}
+        \item Machine learning models can adapt to new threats by continuously learning from new data.
+        \item Traditional methods often require manual updates and may not keep pace with evolving threats.
+        \item \textbf{Citation:} \cite{reasonlabs2023}, \cite{aljabri2024}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Effectiveness of Machine Learning vs. Traditional Methods}
+    \textbf{Resource Constraints}:
+    \begin{itemize}
+        \item Recent advancements have optimized machine learning techniques to work effectively in constrained environments.
+        \item These optimized models maintain high detection rates without excessive computational overhead.
+        \item \textbf{Citation:} \cite{kim2023}, \cite{stackoverflow2012}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Effectiveness of Machine Learning vs. Traditional Methods}
+    \textbf{Complexity of Detection}:
+    \begin{itemize}
+        \item Machine learning approaches, particularly those that incorporate memory analysis and deep learning, show promise in detecting advanced DLL injection techniques.
+        \item They analyze memory patterns and DLL loading sequences, which traditional methods may not effectively identify.
+        \item \textbf{Citation:} \cite{sihwail2021}, \cite{stackoverflow2012}
+    \end{itemize}
+\end{frame}
+
+\subsection{Case Studies and Real-World Examples}
+\begin{frame}
+    \frametitle{Case Studies and Real-World Examples}
+    \begin{itemize}
+        \item Real-world examples of DLL injection attacks and their impact.
+        \item Case studies of successful prevention and mitigation using hardware-based protections.
+        \item Lessons learned and best practices for enhancing security.
+    \end{itemize}
+\end{frame}

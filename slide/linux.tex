@@ -1,0 +1,152 @@
+\section{Linux}
+
+\subsection{The ptrace}
+\begin{frame}
+    \frametitle{The Debugging Interface: ptrace}
+    \textbf{What can ptrace do?}
+    \begin{itemize}
+        \item Attach to a process to control its execution.
+        \item Inspect and modify the memory and registers of the target process.
+        \item Single-step through instructions for fine-grained debugging.
+        \item Intercept and modify system calls made by the target process.
+    \end{itemize}
+    \textit{References:}
+    \begin{itemize}
+        \item \cite{man7ptrace}
+        \item \cite{hizakura2022}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Corresponding enum \_\_ptrace\_request Operations in Linux}
+    \begin{itemize}
+        \item \texttt{PTRACE\_PEEKTEXT} / \texttt{PTRACE\_PEEKDATA} - Read memory from the target process.
+        \item \texttt{PTRACE\_POKETEXT} / \texttt{PTRACE\_POKEDATA} - Write memory to the target process.
+        \item \texttt{PTRACE\_GETREGS} / \texttt{PTRACE\_SETREGS} - Get or set the general-purpose registers.
+        \item \texttt{PTRACE\_SYSCALL} - Intercept system calls.
+        \item \texttt{PTRACE\_CONT} - Continue execution of the target process.
+        \item \texttt{PTRACE\_SINGLESTEP} - Step through the target process one instruction at a time.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Live Demo: Injecting Code into a Running Process}
+    \textbf{Live Demonstration:}
+    \begin{itemize}
+        \item Repository: \mainrepo
+        \item Step-by-step demonstration of the code injection process.
+        \item Explanation of the observed behavior and results.
+        \item Potential applications and implications of the demonstrated technique.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Injecting Code into a Running Process}
+    \textbf{Source Code Analysis:}
+    \begin{itemize}
+        \item Repository: \mainrepo
+        \item Overview of the repository and its purpose.
+        \item Overview the code structure and the main components.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{ProcessHandler: the facade (god) object}
+    \lstinputlisting[language=C++,
+        basicstyle=\ttfamily\tiny,
+        frame=single,
+        backgroundcolor=\color{white},
+        xleftmargin=0pt,
+        xrightmargin=0pt,
+        keepspaces=true,
+        mathescape=false,
+    ]{../src/ProcessHandler.skln.hpp}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Ptrace: the interface to inject remote process}
+    \lstinputlisting[language=C++,
+        basicstyle=\ttfamily\tiny,
+        frame=single,
+        backgroundcolor=\color{white},
+        xleftmargin=0pt,
+        xrightmargin=0pt,
+        keepspaces=true,
+        mathescape=false,
+    ]{../src/Ptrace.skln.hpp}
+\end{frame}
+
+\begin{frame}
+    \frametitle{RemoteCall: how do I invoke a function in a remote process?}
+    \lstinputlisting[language=C++,
+        basicstyle=\ttfamily\tiny,
+        frame=single,
+        backgroundcolor=\color{white},
+        xleftmargin=0pt,
+        xrightmargin=0pt,
+        keepspaces=true,
+        mathescape=false,
+    ]{../src/RemoteCall.pseudo.cpp}
+\end{frame}
+
+\begin{frame}
+    \frametitle{No Shellcode!}
+    \url{https://godbolt.org/z/aYaE966xx}
+    \lstinputlisting[language=C++,
+        basicstyle=\ttfamily\tiny,
+        frame=single,
+        backgroundcolor=\color{white},
+        xleftmargin=0pt,
+        xrightmargin=0pt,
+        keepspaces=true,
+        mathescape=false,
+    ]{../src/RemoteLoader.hpp}
+\end{frame}
+
+\subsection{Injecting Code Without Relying on Target Process's libc}
+\begin{frame}
+    \frametitle{Injecting Code Without Relying on the Target Process's libc}
+    \textbf{What is the Problem?}
+    \begin{itemize}
+        \item Injecting code using \texttt{ptrace} or similar methods typically depends on the target process's libc, which may not be reliable or available.
+        \item Ensuring compatibility and stability when the target process has a different or customized libc version.
+        \item Avoiding interference with the target process's normal operation and dependencies.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Alternative Approaches}
+    \begin{itemize}
+        \item Using direct system calls to avoid dependency on the target's libc.
+        \item Writing to a child's \texttt{/proc/\$\{PID\}/mem}:
+        % \begin{itemize}
+        %     \item Parent processes can write to their children's \texttt{/proc/\$\{PID\}/mem} in most distributions, due to the default value of \texttt{/proc/sys/kernel/yama/ptrace\_scope} (1).
+        %     \item The less secure setting (0) allows any process sharing a UID to write to another process's \texttt{/proc/\$\{PID\}/mem}.
+        %     \item To be the correct parent, execute \texttt{dd} after generating the payload, making \texttt{dd} the parent of \texttt{sleep}. This, however, prevents using \texttt{wait} to make the process interactive.
+        % \end{itemize}
+        \item Using \texttt{memfd\_create} for loading libraries directly via system calls.
+    \end{itemize}
+    Yes, but there are some bugs in \texttt{\textbf{code/tests/Invoke.cpp}}.
+\end{frame}
+
+\subsection{Detailed Analysis of User and Kernel Interaction}
+% the clone system call interface
+\begin{frame}
+    \frametitle{The \texttt{clone} System Call Interface}
+    \textbf{glibc Wrapper vs. Kernel System Call:}
+    \begin{itemize}
+        \item The glibc \texttt{clone()} wrapper function modifies the stack to set it up for the child before invoking the system call.
+        \item Unlike the wrapper, the raw system call can accept \texttt{NULL} for the stack argument, implying copy-on-write if \texttt{CLONE\_VM} is not set.
+        \item On i386, use \texttt{int \$0x80} directly instead of vsyscall for invoking \texttt{clone()}.
+    \end{itemize}
+
+    \textbf{Kernel ABI Variations Across Architectures:}
+    \begin{itemize}
+        \item \textbf{x86-64, sh, tile, alpha:} \texttt{clone(flags, stack, parent\_tid, child\_tid, tls)}
+        \item \textbf{x86-32, ARM, MIPS, etc.:} Order of \texttt{tls} and \texttt{child\_tid} is reversed.
+        \item \textbf{Cris, s390:} Order of \texttt{stack} and \texttt{flags} is reversed.
+        \item \textbf{Microblaze:} Includes an additional \texttt{stack\_size} parameter.
+    \end{itemize}
+\end{frame}
+
+% the clone3 new system call interface
